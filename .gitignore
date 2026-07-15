@@ -1,0 +1,16 @@
+# dependencies
+node_modules/
+
+# env / secrets — 절대 커밋하지 말 것
+.env
+.env.local
+.env.*.local
+
+# 로컬 리뷰 폴백 저장소 (Supabase 미설정 시 사용, PC마다 로컬 데이터)
+data/reviews.local.json
+
+# 로그 / OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

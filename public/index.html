@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>여름 어린이 물놀이장 지도 (서울·경기)</title>
+  <meta name="description" content="서울·경기 지자체 여름 어린이 물놀이장을 카카오맵으로 한눈에. 사진·리뷰 포함." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="style.css?v=20260715i" />
+</head>
+<body>
+  <!-- 로딩 오버레이 : 데이터 불러오는 동안 표시 -->
+  <div id="loading-overlay">
+    <div class="loading-box">
+      <div class="loading-splash">
+        <span class="loading-wave">🌊</span>
+      </div>
+      <div class="loading-title">여름 어린이 물놀이장 지도</div>
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <div id="loading-text" class="loading-text">물놀이장 정보를 불러오는 중...</div>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="wave">〰️</span>
+      <div>
+        <h1>여름 어린이 물놀이장 지도</h1>
+        <p class="sub">서울시 자치구 어린이 물놀이장 · 사진과 리뷰로 미리 확인하세요</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button id="admin-btn" class="admin-btn hidden">관리자</button>
+    </div>
+  </header>
+
+  <!-- 광고 영역 (상단 배너) : 공동육아 우리어린이집 -->
+  <a class="ad-slot woori-ad" href="https://www.woori1994.com/" target="_blank" rel="noopener" aria-label="공동육아 우리어린이집 홍보 - 홈페이지 열기">
+    <span class="ad-label">AD</span>
+    <div class="woori-inner">
+      <img class="woori-dol" src="dol.gif?v=20260715i" alt="우리어린이집 캐릭터 돌돌이" />
+      <div class="woori-copy">
+        <div class="woori-eyebrow">1994년 대한민국 첫 번째 공동육아</div>
+        <div class="woori-title">성미산마을 <b>우리어린이집</b> 원아 모집</div>
+        <div class="woori-sub">자연과 마을에서 자라나는 아이들 · 텃밭 · 생태놀이</div>
+        <span class="woori-cta">입학 상담 신청하기 →</span>
+      </div>
+      <img class="woori-kids" src="kids.png?v=20260715i" alt="자연에서 노는 아이들 일러스트" />
+    </div>
+  </a>
+
+  <!-- 지역/카테고리 필터 -->
+  <div class="filterbar">
+    <div class="filter-group">
+      <span class="filter-title">자치구</span>
+      <div class="chips" id="region-filters"></div>
+    </div>
+    <div class="filter-group">
+      <span class="filter-title">종류</span>
+      <div class="chips" id="cat-filters"></div>
+    </div>
+    <div class="data-source-wrap">
+      <span id="data-source" class="data-source"></span>
+    </div>
+  </div>
+
+  <main class="layout">
+    <aside class="sidebar" id="list"></aside>
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div id="map-error" class="map-error hidden">
+        <div class="map-error-inner">
+          <h3>지도를 불러오지 못했습니다</h3>
+          <p id="map-error-msg">카카오 개발자 콘솔에서 <b>카카오맵 서비스 활성화</b>와 <b>Web 플랫폼 도메인 등록</b>이 필요합니다.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 광고 영역 (하단) -->
+  <div class="ad-slot ad-footer" aria-label="광고 영역">
+    <div class="ad-inner">
+      <span class="ad-label">AD</span>
+      <span class="ad-text">광고 자리 (반응형) — 추후 광고 코드로 교체됩니다</span>
+    </div>
+  </div>
+
+  <!-- 리뷰 패널 (모달) -->
+  <div id="review-modal" class="modal hidden">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-box">
+      <button class="modal-close" data-close>×</button>
+      <div class="modal-head">
+        <h2 id="rv-place-name">장소</h2>
+        <span class="modal-sub" id="rv-place-addr"></span>
+      </div>
+
+      <div class="modal-body">
+        <!-- 사진 갤러리 -->
+        <div class="rv-section">
+          <h3>사진</h3>
+          <div class="rv-gallery" id="rv-gallery"><p class="rv-empty">아직 사진이 없어요.</p></div>
+        </div>
+
+        <!-- 리뷰 목록 -->
+        <div class="rv-section">
+          <h3>리뷰 <span id="rv-count" class="rv-count">0</span></h3>
+          <div class="rv-list" id="rv-list"><p class="rv-empty">첫 리뷰를 남겨보세요.</p></div>
+        </div>
+
+        <!-- 리뷰 작성 -->
+        <div class="rv-section rv-write">
+          <h3>리뷰 작성</h3>
+          <form id="rv-form">
+            <input type="text" id="rv-name" placeholder="이름 (예: 기덕아빠)" maxlength="20" required />
+            <textarea id="rv-content" placeholder="다녀온 소감을 남겨주세요 (물 온도, 그늘, 주차 등)" maxlength="500" rows="3" required></textarea>
+            <label class="rv-file">
+              <input type="file" id="rv-photo" accept="image/*" />
+              <span id="rv-file-label">사진 첨부 (선택)</span>
+            </label>
+            <div class="rv-preview hidden" id="rv-preview"><img id="rv-preview-img" alt="미리보기" /></div>
+            <button type="submit" class="rv-submit" id="rv-submit">리뷰 등록</button>
+            <p class="rv-msg" id="rv-msg"></p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 관리자 로그인 모달 -->
+  <div id="admin-modal" class="modal hidden">
+    <div class="modal-backdrop" data-close-admin></div>
+    <div class="modal-box modal-sm">
+      <button class="modal-close" data-close-admin>×</button>
+      <h2>관리자 로그인</h2>
+      <p class="admin-desc">리뷰를 삭제하려면 관리자 비밀번호를 입력하세요.</p>
+      <form id="admin-form">
+        <input type="password" id="admin-pw" placeholder="비밀번호" required />
+        <button type="submit" class="rv-submit">로그인</button>
+        <p class="rv-msg" id="admin-msg"></p>
+      </form>
+      <div id="admin-logged" class="hidden">
+        <p class="admin-ok">관리자 모드 활성화됨 — 리뷰 옆 삭제 버튼을 사용하세요.</p>
+        <button id="admin-logout" class="admin-btn">로그아웃</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 설정(구글시트 URL) + 내장 백업 데이터 + 시트 로더 -->
+  <script src="config.js?v=20260715i"></script>
+  <script src="data.js?v=20260715i"></script>
+  <script src="mapo-seed.js?v=20260715i"></script>
+  <script src="sheet-loader.js?v=20260715i"></script>
+  <!-- 카카오맵 JavaScript SDK (JS 키는 도메인 등록으로 보호되는 공개용 키) -->
+  <script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=867bd9cb07e8b810edf62673e959f443&libraries=services,clusterer&autoload=false" onerror="window.__kakaoLoadFailed=true"></script>
+  <script src="app.js?v=20260715i"></script>
+</body>
+</html>

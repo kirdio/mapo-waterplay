@@ -1,0 +1,20 @@
+{
+  "name": "mapo-waterplay",
+  "version": "1.0.0",
+  "description": "여름 어린이 물놀이장 지도 (서울) — 카카오맵 기반 웹앱. Supabase(운영) + 로컬 JSON(폴백) 하이브리드.",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "seed:supabase": "node scripts/seed-supabase.js",
+    "geocode": "node scripts/geocode.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "express": "^4.19.2"
+  }
+}
