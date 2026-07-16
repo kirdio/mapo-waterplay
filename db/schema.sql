@@ -62,3 +62,24 @@ drop policy if exists places_public_read on public.places;
 create policy places_public_read
   on public.places for select
   using (true);
+
+-- ── 제보 테이블 (사용자 제보 → 관리자 전용 열람) ───────────────────
+--  reviews와 달리 anon 정책을 하나도 만들지 않는다.
+--  즉 anon/publishable 키로는 읽기·쓰기·삭제 전부 불가 — 서버가
+--  service_role 키로만 접근(RLS 우회). 공개 제보 폼은 서버의
+--  POST /api/reports 를 거치므로 이 제약과 무관하게 동작한다.
+create table if not exists public.reports (
+  id          uuid primary key default gen_random_uuid(),
+  place_id    text,                          -- null이면 "새 물놀이장 제보"
+  type        text not null default 'etc',   -- new-place | correction | amenity | etc
+  content     text not null,
+  contact     text,
+  status      text not null default 'new',   -- new | done
+  created_at  timestamptz not null default now()
+);
+
+create index if not exists reports_status_idx on public.reports (status);
+create index if not exists reports_created_at_idx on public.reports (created_at desc);
+
+alter table public.reports enable row level security;
+-- 정책을 만들지 않음 = RLS가 모든 접근을 기본 차단(service_role만 우회 가능).

@@ -161,9 +161,11 @@
         '<div class="card-foot">' +
         '<button class="card-btn btn-map">지도에서 보기</button>' +
         '<button class="card-btn btn-review">사진·리뷰 <span class="rc">(' + rc + ')</span></button>' +
+        '<button class="card-btn btn-report">정보 제보</button>' +
         '</div>';
       card.querySelector(".btn-map").addEventListener("click", function (e) { e.stopPropagation(); focusPlace(i); });
       card.querySelector(".btn-review").addEventListener("click", function (e) { e.stopPropagation(); openReviews(p); });
+      card.querySelector(".btn-report").addEventListener("click", function (e) { e.stopPropagation(); openReport(p); });
       card.addEventListener("click", function () { focusPlace(i); });
       listEl.appendChild(card);
     });
@@ -485,6 +487,54 @@
     el.addEventListener("click", function () { modal.classList.add("hidden"); });
   });
 
+  // ================= 제보 기능 =================
+  var reportModal = document.getElementById("report-modal");
+  var reportPlaceLabel = document.getElementById("report-place-label");
+  var reportForm = document.getElementById("report-form");
+  var reportType = document.getElementById("report-type");
+  var reportContent = document.getElementById("report-content");
+  var reportContact = document.getElementById("report-contact");
+  var reportSubmit = document.getElementById("report-submit");
+  var reportMsg = document.getElementById("report-msg");
+  var reportPlaceId = null; // 특정 장소 카드에서 열었을 때만 설정, 아니면 "새 물놀이장" 제보
+
+  function openReport(p) {
+    reportPlaceId = p ? p.id : null;
+    reportForm.reset();
+    reportPlaceLabel.textContent = p ? (p.name + " 정보를 제보해 주세요.") : "새 물놀이장을 알려주세요.";
+    reportType.value = p ? "correction" : "new-place";
+    reportMsg.textContent = ""; reportMsg.className = "rv-msg";
+    reportModal.classList.remove("hidden");
+  }
+
+  document.getElementById("report-btn").addEventListener("click", function () { openReport(null); });
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-close-report]"), function (el) {
+    el.addEventListener("click", function () { reportModal.classList.add("hidden"); });
+  });
+
+  reportForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var content = reportContent.value.trim();
+    if (!content) return;
+    reportSubmit.disabled = true; reportMsg.textContent = "등록 중..."; reportMsg.className = "rv-msg";
+    api("/reports", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        placeId: reportPlaceId,
+        type: reportType.value,
+        content: content,
+        contact: reportContact.value.trim()
+      })
+    }).then(function () {
+      reportMsg.textContent = "제보가 접수되었습니다. 고맙습니다!"; reportMsg.className = "rv-msg ok";
+      reportForm.reset();
+    }).catch(function (err) {
+      reportMsg.textContent = "등록 실패: " + err.message; reportMsg.className = "rv-msg err";
+    }).finally(function () { reportSubmit.disabled = false; });
+  });
+
   // ================= 관리자 =================
   var adminModal = document.getElementById("admin-modal");
   var adminBtn = document.getElementById("admin-btn");
@@ -498,6 +548,7 @@
   function openAdmin() {
     adminModal.classList.remove("hidden");
     updateAdminUI();
+    if (isAdmin) loadReportBoard();
   }
   adminBtn.addEventListener("click", openAdmin);
 
@@ -531,11 +582,88 @@
       adminBtn.classList.remove("hidden");
       adminBtn.classList.add("on"); adminBtn.textContent = "관리자 ✓";
       updateAdminUI();
+      loadReportBoard();
       if (currentPlace && !modal.classList.contains("hidden")) loadReviews(currentPlace.id);
     }).catch(function () {
       adminMsg.textContent = "비밀번호가 올바르지 않습니다."; adminMsg.className = "rv-msg err";
     });
   });
+
+  // ---- 제보 게시판 (관리자 전용) ----
+  var reportBoard = document.getElementById("report-board");
+  var reportCountEl = document.getElementById("report-count");
+  var reportFilterChips = document.querySelectorAll("[data-report-filter]");
+  var currentReportFilter = "new";
+  var REPORT_TYPE_LABEL = { "new-place": "새 물놀이장", "correction": "정보 수정", "amenity": "편의시설", "etc": "기타" };
+
+  Array.prototype.forEach.call(reportFilterChips, function (chip) {
+    chip.addEventListener("click", function () {
+      currentReportFilter = chip.getAttribute("data-report-filter");
+      Array.prototype.forEach.call(reportFilterChips, function (c) { c.classList.toggle("active", c === chip); });
+      loadReportBoard();
+    });
+  });
+
+  function loadReportBoard() {
+    if (!isAdmin) return;
+    reportBoard.innerHTML = '<p class="rv-empty">불러오는 중...</p>';
+    var qs = currentReportFilter ? ("?status=" + currentReportFilter) : "";
+    api("/admin/reports" + qs, { headers: { "X-Admin-Token": adminToken || "" } })
+      .then(function (data) { renderReportBoard(data.reports || []); })
+      .catch(function (e) {
+        reportBoard.innerHTML = '<p class="rv-empty">제보를 불러오지 못했습니다: ' + esc(e.message) + '</p>';
+      });
+  }
+
+  function placeNameById(id) {
+    var found = places.filter(function (x) { return x.id === id; });
+    return found.length ? found[0].name : null;
+  }
+
+  function renderReportBoard(reports) {
+    reportCountEl.textContent = reports.length;
+    if (!reports.length) { reportBoard.innerHTML = '<p class="rv-empty">제보가 없습니다.</p>'; return; }
+    reportBoard.innerHTML = "";
+    reports.forEach(function (r) {
+      var item = document.createElement("div");
+      item.className = "rv-item";
+      var date = (r.created_at || "").slice(0, 10);
+      var placeName = r.place_id ? placeNameById(r.place_id) : null;
+      item.innerHTML =
+        '<div class="report-item-head">' +
+        '<span class="report-type-badge' + (r.status === "done" ? " done" : "") + '">' + esc(REPORT_TYPE_LABEL[r.type] || r.type) + '</span>' +
+        (placeName ? '<span class="report-place">' + esc(placeName) + '</span>' : '') +
+        '<span class="rv-item-date">' + esc(date) + '</span>' +
+        '</div>' +
+        '<div class="rv-item-text">' + esc(r.content) + '</div>' +
+        (r.contact ? '<div class="rv-item-text" style="color:var(--muted);font-size:12px;">연락처: ' + esc(r.contact) + '</div>' : '') +
+        '<div class="report-actions">' +
+        '<button class="report-toggle">' + (r.status === "done" ? "신규로 되돌리기" : "처리완료로 표시") + '</button>' +
+        '<button class="report-del">삭제</button>' +
+        '</div>';
+      item.querySelector(".report-toggle").addEventListener("click", function () {
+        toggleReportStatus(r.id, r.status === "done" ? "new" : "done");
+      });
+      item.querySelector(".report-del").addEventListener("click", function () { deleteReport(r.id); });
+      reportBoard.appendChild(item);
+    });
+  }
+
+  function toggleReportStatus(id, status) {
+    api("/admin/reports/" + id, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-Admin-Token": adminToken || "" },
+      body: JSON.stringify({ status: status })
+    }).then(function () { loadReportBoard(); }).catch(function (e) { alert("변경 실패: " + e.message); });
+  }
+
+  function deleteReport(id) {
+    if (!confirm("이 제보를 삭제할까요?")) return;
+    api("/admin/reports/" + id, {
+      method: "DELETE",
+      headers: { "X-Admin-Token": adminToken || "" }
+    }).then(function () { loadReportBoard(); }).catch(function (e) { alert("삭제 실패: " + e.message); });
+  }
 
   document.getElementById("admin-logout").addEventListener("click", function () {
     isAdmin = false; adminToken = null;
@@ -563,7 +691,8 @@
   // ESC 키로 모달 닫기
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") {
-      modal.classList.add("hidden"); adminModal.classList.add("hidden"); lightbox.classList.add("hidden");
+      modal.classList.add("hidden"); adminModal.classList.add("hidden");
+      reportModal.classList.add("hidden"); lightbox.classList.add("hidden");
     }
   });
 

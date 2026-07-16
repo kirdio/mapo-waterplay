@@ -36,6 +36,7 @@
       </div>
     </div>
     <div class="topbar-actions">
+      <button id="report-btn" class="admin-btn">📢 제보하기</button>
       <button id="admin-btn" class="admin-btn hidden">관리자</button>
     </div>
   </header>
@@ -141,13 +142,35 @@
     </div>
   </div>
 
+  <!-- 제보 모달 -->
+  <div id="report-modal" class="modal hidden">
+    <div class="modal-backdrop" data-close-report></div>
+    <div class="modal-box modal-sm">
+      <button class="modal-close" data-close-report>×</button>
+      <h2>제보하기</h2>
+      <p class="admin-desc" id="report-place-label">새 물놀이장을 알려주세요.</p>
+      <form id="report-form">
+        <select id="report-type">
+          <option value="new-place">새 물놀이장 제보</option>
+          <option value="correction">정보 수정(기간·시간 등)</option>
+          <option value="amenity">편의시설 정보(화장실·주차 등)</option>
+          <option value="etc">기타</option>
+        </select>
+        <textarea id="report-content" placeholder="내용을 알려주세요 (위치, 무엇이 잘못됐는지 등)" maxlength="1000" rows="4" required></textarea>
+        <input type="text" id="report-contact" placeholder="연락처 (선택 — 회신용)" maxlength="100" />
+        <button type="submit" class="rv-submit" id="report-submit">제보 등록</button>
+        <p class="rv-msg" id="report-msg"></p>
+      </form>
+    </div>
+  </div>
+
   <!-- 관리자 로그인 모달 -->
   <div id="admin-modal" class="modal hidden">
     <div class="modal-backdrop" data-close-admin></div>
-    <div class="modal-box modal-sm">
+    <div class="modal-box">
       <button class="modal-close" data-close-admin>×</button>
       <h2>관리자 로그인</h2>
-      <p class="admin-desc">리뷰를 삭제하려면 관리자 비밀번호를 입력하세요.</p>
+      <p class="admin-desc">리뷰 삭제·제보 열람은 관리자 비밀번호가 필요합니다.</p>
       <form id="admin-form">
         <input type="password" id="admin-pw" placeholder="비밀번호" required />
         <button type="submit" class="rv-submit">로그인</button>
@@ -156,6 +179,16 @@
       <div id="admin-logged" class="hidden">
         <p class="admin-ok">관리자 모드 활성화됨 — 리뷰 옆 삭제 버튼을 사용하세요.</p>
         <button id="admin-logout" class="admin-btn">로그아웃</button>
+
+        <div class="rv-section">
+          <h3>제보 게시판 <span id="report-count" class="rv-count">0</span></h3>
+          <div class="chips" style="margin-bottom:8px;">
+            <button type="button" class="chip active" data-report-filter="new">신규</button>
+            <button type="button" class="chip" data-report-filter="done">처리완료</button>
+            <button type="button" class="chip" data-report-filter="">전체</button>
+          </div>
+          <div class="rv-list" id="report-board"><p class="rv-empty">불러오는 중...</p></div>
+        </div>
       </div>
     </div>
   </div>

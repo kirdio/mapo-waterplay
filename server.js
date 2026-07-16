@@ -148,6 +148,78 @@ const reviewStore = {
   },
 };
 
+// ── 제보(reports): 로컬 JSON 폴백 저장소 ─────────────────────────
+// Supabase reports 테이블은 anon 정책이 아예 없어(db/schema.sql) 관리자
+// (service_role)만 접근 가능 — 관리자 외 열람 자체가 DB 레벨에서 차단됨.
+const REPORTS_FILE = path.join(__dirname, 'data', 'reports.local.json');
+function readLocalReports() {
+  try {
+    return JSON.parse(fs.readFileSync(REPORTS_FILE, 'utf8'));
+  } catch {
+    return [];
+  }
+}
+function writeLocalReports(list) {
+  fs.writeFileSync(REPORTS_FILE, JSON.stringify(list, null, 2), 'utf8');
+}
+
+const reportStore = {
+  async list(status) {
+    if (supabase) {
+      let q = supabase
+        .from('reports')
+        .select('id, place_id, type, content, contact, status, created_at')
+        .order('created_at', { ascending: false });
+      if (status) q = q.eq('status', status);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+    let list = readLocalReports().sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    if (status) list = list.filter((r) => r.status === status);
+    return list;
+  },
+
+  async add({ placeId, type, content, contact }) {
+    const row = { place_id: placeId || null, type, content, contact: contact || null, status: 'new' };
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('reports')
+        .insert(row)
+        .select('id, place_id, type, content, contact, status, created_at')
+        .single();
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    const list = readLocalReports();
+    const saved = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row };
+    list.push(saved);
+    writeLocalReports(list);
+    return saved;
+  },
+
+  async setStatus(id, status) {
+    if (supabase) {
+      const { error } = await supabase.from('reports').update({ status }).eq('id', id);
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const list = readLocalReports();
+    const row = list.find((r) => String(r.id) === String(id));
+    if (row) { row.status = status; writeLocalReports(list); }
+  },
+
+  async remove(id) {
+    if (supabase) {
+      const { error } = await supabase.from('reports').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+      return;
+    }
+    const list = readLocalReports();
+    writeLocalReports(list.filter((r) => String(r.id) !== String(id)));
+  },
+};
+
 // ════════════════════════════════════════════════════════════════
 //  관리자 인증 (fail-closed + 브루트포스 제한 + 인메모리 토큰)
 // ════════════════════════════════════════════════════════════════
@@ -213,6 +285,23 @@ function reviewRateLimited(ip) {
   reviewPosts.set(ip, arr);
   return arr.length > REVIEW_MAX;
 }
+
+// ════════════════════════════════════════════════════════════════
+//  제보 등록 rate limit (IP당 쿨다운) — 리뷰보다 더 빡빡하게
+// ════════════════════════════════════════════════════════════════
+const reportPosts = new Map(); // ip -> [timestamps]
+const REPORT_WINDOW_MS = 10 * 60 * 1000; // 10분
+const REPORT_MAX = 3; // 10분당 3건
+
+function reportRateLimited(ip) {
+  const now = Date.now();
+  const arr = (reportPosts.get(ip) || []).filter((t) => now - t < REPORT_WINDOW_MS);
+  arr.push(now);
+  reportPosts.set(ip, arr);
+  return arr.length > REPORT_MAX;
+}
+
+const REPORT_TYPES = ['new-place', 'correction', 'amenity', 'etc'];
 
 // ════════════════════════════════════════════════════════════════
 //  라우트
@@ -345,6 +434,78 @@ app.post('/api/admin/logout', (req, res) => {
   const token = req.headers['x-admin-token'];
   if (token) adminTokens.delete(token);
   res.json({ ok: true });
+});
+
+// 제보 등록 (공개, 관리자만 열람 가능)
+app.post('/api/reports', async (req, res) => {
+  const ip = clientIp(req);
+  if (reportRateLimited(ip)) {
+    return res
+      .status(429)
+      .json({ error: '잠시 후 다시 시도해 주세요. (제보가 너무 잦습니다)' });
+  }
+
+  const body = req.body || {};
+  const placeId = body.placeId ? String(body.placeId).trim() : null;
+  const type = REPORT_TYPES.includes(body.type) ? body.type : 'etc';
+  const content = String(body.content || '').trim();
+  const contact = body.contact ? String(body.contact).trim() : null;
+
+  if (!content) {
+    return res.status(400).json({ error: '내용을 입력해 주세요.' });
+  }
+  if (content.length > 1000 || (contact && contact.length > 100)) {
+    return res.status(400).json({ error: '입력이 너무 깁니다.' });
+  }
+  if (placeId && !getPlaces().some((p) => p.id === placeId)) {
+    return res.status(400).json({ error: '알 수 없는 장소입니다.' });
+  }
+
+  try {
+    const saved = await reportStore.add({ placeId, type, content, contact });
+    res.status(201).json({ report: { id: saved.id } }); // 등록자에겐 최소 정보만 반환
+  } catch (e) {
+    console.error('[reports] 등록 실패:', e.message);
+    res.status(500).json({ error: '제보 등록에 실패했습니다.' });
+  }
+});
+
+// 제보 목록 (관리자 전용)
+app.get('/api/admin/reports', requireAdmin, async (req, res) => {
+  try {
+    const status = req.query.status ? String(req.query.status) : null;
+    const reports = await reportStore.list(status);
+    res.json({ reports });
+  } catch (e) {
+    console.error('[reports] 조회 실패:', e.message);
+    res.status(500).json({ error: '제보를 불러오지 못했습니다.' });
+  }
+});
+
+// 제보 상태 변경 (관리자 전용)
+app.patch('/api/admin/reports/:id', requireAdmin, async (req, res) => {
+  const status = (req.body && req.body.status) || '';
+  if (status !== 'new' && status !== 'done') {
+    return res.status(400).json({ error: 'status는 new 또는 done 이어야 합니다.' });
+  }
+  try {
+    await reportStore.setStatus(req.params.id, status);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[reports] 상태 변경 실패:', e.message);
+    res.status(500).json({ error: '상태 변경에 실패했습니다.' });
+  }
+});
+
+// 제보 삭제 (관리자 전용)
+app.delete('/api/admin/reports/:id', requireAdmin, async (req, res) => {
+  try {
+    await reportStore.remove(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[reports] 삭제 실패:', e.message);
+    res.status(500).json({ error: '삭제에 실패했습니다.' });
+  }
 });
 
 // SPA 폴백 (알 수 없는 비 API 경로는 index.html)

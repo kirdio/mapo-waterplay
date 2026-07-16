@@ -6,8 +6,9 @@ node_modules/
 .env.local
 .env.*.local
 
-# 로컬 리뷰 폴백 저장소 (Supabase 미설정 시 사용, PC마다 로컬 데이터)
+# 로컬 리뷰/제보 폴백 저장소 (Supabase 미설정 시 사용, PC마다 로컬 데이터)
 data/reviews.local.json
+data/reports.local.json
 
 # 로그 / OS
 *.log
