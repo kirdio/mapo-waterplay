@@ -53,15 +53,31 @@ create table if not exists public.places (
   fee           text,
   note          text,
   tel           text,
-  source        text
+  source        text,
+  sort_order    integer,
+  updated_at    timestamptz default now(),
+  -- 편의시설 3상태(true=있음 / false=없음 / NULL=미확인).
+  -- Supabase Table Editor에서 체크박스를 켜고 끄면 앱에 반영된다(캐시 TTL 1분).
+  toilet        boolean,   -- 화장실 🚺
+  shower        boolean,   -- 샤워실 🚿
+  changing      boolean,   -- 탈의실 👕
+  store         boolean    -- 편의점 🏪
 );
 
 alter table public.places enable row level security;
 
+-- 앱(익명 사용자)이 장소 목록을 읽을 수 있도록 공개 읽기 허용.
 drop policy if exists places_public_read on public.places;
 create policy places_public_read
   on public.places for select
   using (true);
+
+-- 기존 places 테이블에 편의시설 컬럼이 없다면 추가(재실행 안전).
+alter table public.places
+  add column if not exists toilet   boolean,
+  add column if not exists shower   boolean,
+  add column if not exists changing boolean,
+  add column if not exists store    boolean;
 
 -- ── 제보 테이블 (사용자 제보 → 관리자 전용 열람) ───────────────────
 --  service_role 키 사용이 필수다(anon 정책을 두지 않는다).

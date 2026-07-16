@@ -62,17 +62,88 @@ if (SUPABASE_URL && SUPABASE_KEY && !/YOUR-PROJECT/.test(SUPABASE_URL)) {
   console.log('[data] Supabase 미설정 — 리뷰는 로컬 JSON(data/reviews.local.json)에 저장됩니다.');
 }
 
-// ── places: data/places.json ────────────────────────────────────
+// ── places: Supabase places 테이블(우선) → data/places.json(폴백) ──
+//  편의시설(toilet/shower/changing/store)은 Supabase Table Editor에서
+//  직접 켜고 끄면 캐시 TTL 후 앱에 반영된다.
 const PLACES_FILE = path.join(__dirname, 'data', 'places.json');
+const PLACES_TTL_MS = 60 * 1000; // 1분마다 갱신(Table Editor 편집 반영 주기)
 let placesCache = null;
-function getPlaces() {
-  if (placesCache) return placesCache;
+let placesLoadedAt = 0;
+
+// DB row(snake_case, 편의시설 평면 컬럼) → 앱이 쓰는 camelCase + amenities 객체
+function mapPlaceRow(r) {
+  return {
+    id: r.id,
+    region: r.region,
+    district: r.district,
+    name: r.name,
+    category: r.category,
+    addressRoad: r.address_road,
+    lat: r.lat,
+    lng: r.lng,
+    period: r.period,
+    hours: r.hours,
+    fee: r.fee,
+    note: r.note,
+    tel: r.tel,
+    source: r.source,
+    amenities: {
+      toilet: r.toilet,
+      shower: r.shower,
+      changing: r.changing,
+      store: r.store,
+    },
+  };
+}
+
+// 파일 폴백 로더
+function loadPlacesFromFile() {
   try {
     const raw = JSON.parse(fs.readFileSync(PLACES_FILE, 'utf8'));
-    placesCache = Array.isArray(raw) ? raw : raw.places || [];
+    return Array.isArray(raw) ? raw : raw.places || [];
   } catch (e) {
-    console.error('[places] 로드 실패:', e.message);
-    placesCache = [];
+    console.error('[places] 파일 로드 실패:', e.message);
+    return [];
+  }
+}
+
+// Supabase에서 places를 읽어 캐시에 채운다(실패 시 파일 폴백).
+async function refreshPlaces() {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('places')
+        .select('id, region, district, name, category, address_road, lat, lng, period, hours, fee, note, tel, source, sort_order, toilet, shower, changing, store')
+        .order('sort_order', { ascending: true, nullsFirst: false })
+        .order('id', { ascending: true });
+      if (error) throw new Error(error.message);
+      if (data && data.length) {
+        placesCache = data.map(mapPlaceRow);
+        placesLoadedAt = Date.now();
+        return placesCache;
+      }
+      // 테이블이 비어 있으면 파일 폴백
+      console.warn('[places] Supabase places 비어 있음 — 파일 폴백');
+    } catch (e) {
+      console.error('[places] Supabase 로드 실패, 파일 폴백:', e.message);
+    }
+  }
+  placesCache = loadPlacesFromFile();
+  placesLoadedAt = Date.now();
+  return placesCache;
+}
+
+// 동기 접근자: 캐시 반환(초기엔 파일로 즉시 채우고, 백그라운드로 DB 갱신).
+function getPlaces() {
+  if (!placesCache) {
+    // 최초 호출: 앱이 멈추지 않도록 파일로 즉시 채우고 DB 갱신은 비동기로.
+    placesCache = loadPlacesFromFile();
+    placesLoadedAt = Date.now();
+    refreshPlaces().catch(() => {});
+  } else if (Date.now() - placesLoadedAt > PLACES_TTL_MS) {
+    // TTL 지나면 백그라운드 갱신(현재 요청은 기존 캐시로 즉시 응답).
+    placesLoadedAt = Date.now(); // 중복 갱신 방지
+    refreshPlaces().catch(() => {});
   }
   return placesCache;
 }
@@ -532,7 +603,10 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
+  // 시작 시 Supabase places를 미리 로드(편의시설 포함). 실패해도 파일 폴백.
+  try { await refreshPlaces(); } catch (_) {}
+  const src = supabase ? 'Supabase places 테이블' : 'data/places.json(파일)';
   console.log(`\n  🌊 물놀이장 지도 서버 실행 중 → http://localhost:${PORT}`);
-  console.log(`     장소 ${getPlaces().length}곳 · 관리자 ${ADMIN_PASSWORD ? '설정됨' : '미설정(로그인 차단)'}\n`);
+  console.log(`     장소 ${getPlaces().length}곳 (출처: ${src}) · 관리자 ${ADMIN_PASSWORD ? '설정됨' : '미설정(로그인 차단)'}\n`);
 });
