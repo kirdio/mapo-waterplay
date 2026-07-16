@@ -38,6 +38,34 @@
   function tagClass(cat) { return cat.indexOf("무료") > -1 || cat.indexOf("공원") > -1 || cat.indexOf("하천") > -1 || cat.indexOf("도심") > -1 ? "free" : "hangang"; }
   function isFreeCat(cat) { return cat.indexOf("무료") > -1 || cat.indexOf("공원") > -1 || cat.indexOf("하천") > -1 || cat.indexOf("도심") > -1; }
 
+  // 편의시설 픽토그램 (있음/없음/미확인 3상태 — 미확인은 제보로 채워짐)
+  var AMENITIES = [
+    { key: "toilet", icon: "🚻", label: "화장실" },
+    { key: "shower", icon: "🚿", label: "샤워실" },
+    { key: "changing", icon: "👕", label: "탈의실" },
+    { key: "store", icon: "🏪", label: "편의점" }
+  ];
+
+  function amenityCardHTML(p) {
+    var a = p.amenities || {};
+    var have = AMENITIES.filter(function (x) { return a[x.key] === true; });
+    if (!have.length) return "";
+    return '<div class="amenity-icons">' + have.map(function (x) {
+      return '<span title="' + x.label + '">' + x.icon + '</span>';
+    }).join("") + '</div>';
+  }
+
+  function amenityDetailHTML(p) {
+    var a = p.amenities || {};
+    var items = AMENITIES.map(function (x) {
+      var v = a[x.key];
+      var cls = v === true ? "yes" : (v === false ? "no" : "unknown");
+      var mark = v === true ? "" : (v === false ? " 없음" : " ?");
+      return '<span class="a-item ' + cls + '">' + x.icon + ' ' + x.label + mark + '</span>';
+    }).join("");
+    return '<div class="amenity-full">' + items + '</div>';
+  }
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (m) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m];
@@ -151,6 +179,7 @@
         '<span class="tag ' + tagClass(p.category) + '">' + esc(p.category) + '</span></div>' +
         '<div class="region-badge">' + esc(p.region) + ' · ' + esc(p.district) + '</div>' +
         '<div class="addr">' + esc(p.addressRoad) + '</div>' +
+        amenityCardHTML(p) +
         '<div class="meta">' +
         '<div class="row"><span class="k">기간</span><b>' + esc(p.period) + '</b></div>' +
         '<div class="row"><span class="k">시간</span><span>' + esc(p.hours) + '</span></div>' +
@@ -313,12 +342,15 @@
       '<div>' + esc(p.hours) + ' · ' + esc(p.fee) + '</div>' +
       '<div style="margin-top:4px;color:#5b7a94">' + esc(p.note) + '</div>' +
       '</div>' +
+      amenityDetailHTML(p) +
+      '<span class="amenity-report-link">시설 정보 제보 →</span>' +
       '<span class="iw-btn">사진·리뷰 보기</span>';
 
     var overlay = new kakao.maps.CustomOverlay({ position: pos, content: content, yAnchor: 1.35, zIndex: 3 });
     overlays[i] = overlay;
     content.querySelector(".iw-close").addEventListener("click", function (e) { e.stopPropagation(); overlay.setMap(null); });
     content.querySelector(".iw-btn").addEventListener("click", function (e) { e.stopPropagation(); openReviews(p); });
+    content.querySelector(".amenity-report-link").addEventListener("click", function (e) { e.stopPropagation(); openReport(p, "amenity"); });
 
     kakao.maps.event.addListener(marker, "click", function () { focusPlace(i); });
     if (!placeVisible(p)) marker.setMap(null);
@@ -498,11 +530,11 @@
   var reportMsg = document.getElementById("report-msg");
   var reportPlaceId = null; // 특정 장소 카드에서 열었을 때만 설정, 아니면 "새 물놀이장" 제보
 
-  function openReport(p) {
+  function openReport(p, presetType) {
     reportPlaceId = p ? p.id : null;
     reportForm.reset();
     reportPlaceLabel.textContent = p ? (p.name + " 정보를 제보해 주세요.") : "새 물놀이장을 알려주세요.";
-    reportType.value = p ? "correction" : "new-place";
+    reportType.value = presetType || (p ? "correction" : "new-place");
     reportMsg.textContent = ""; reportMsg.className = "rv-msg";
     reportModal.classList.remove("hidden");
   }
