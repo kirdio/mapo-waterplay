@@ -27,7 +27,17 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 
 // ── 정적 파일: public/ 로만 한정 (server.js/.env 등 비노출) ──────
-app.use(express.static(path.join(__dirname, 'public')));
+//  index.html 은 항상 최신을 받도록 no-cache(캐시버스터 ?v= 값을 즉시 반영).
+//  나머지 자원(app.js/style.css 등)은 ?v= 캐시버스터가 있으므로 길게 캐시해도 안전.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: function (res, filePath) {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+  }
+}));
 
 // ════════════════════════════════════════════════════════════════
 //  데이터 계층
@@ -600,6 +610,7 @@ app.get('*', (req, res, next) => {
   // (예: /server.js, /.env, /foo.css). 선행 점 dotfile도 포함.
   const base = req.path.split('/').pop() || '';
   if (base.includes('.')) return res.status(404).send('Not found');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
