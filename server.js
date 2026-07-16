@@ -39,6 +39,11 @@ const SUPABASE_KEY =
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY && !/YOUR-PROJECT/.test(SUPABASE_URL)) {
   try {
+    // Node 환경에서 native WebSocket이 없을 때 ws 폴리필 주입
+    // (@supabase/supabase-js 초기화가 WebSocket 미존재로 실패하는 것을 방지)
+    if (typeof globalThis.WebSocket === 'undefined') {
+      try { globalThis.WebSocket = require('ws'); } catch (_) {}
+    }
     const { createClient } = require('@supabase/supabase-js');
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { persistSession: false },
