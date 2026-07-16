@@ -4,13 +4,16 @@
   var markers = [];
   var overlays = [];
   var activeIndex = -1;
+  var provinceFilter = "서울";  // 시/도 탭: 전체 | 서울 | 경기
   var regionFilter = "마포구";  // 첫 화면 기본 필터: 마포구
   var catFilter = "전체";
+  var PROVINCE_REGION = { "서울": "서울특별시", "경기": "경기도" };
   var isAdmin = false;
   var currentPlace = null;
   var reviewCounts = {}; // placeId -> count
 
   var listEl = document.getElementById("list");
+  var provinceFiltersEl = document.getElementById("province-filters");
   var regionFiltersEl = document.getElementById("region-filters");
   var catFiltersEl = document.getElementById("cat-filters");
   var errEl = document.getElementById("map-error");
@@ -25,15 +28,22 @@
     });
   }
 
-  // ---- 필터 후보 (자치구 기준) ----
+  // ---- 필터 후보 (선택된 시/도 내 자치구 기준) ----
+  function placesInProvince() {
+    if (provinceFilter === "전체") return places;
+    var want = PROVINCE_REGION[provinceFilter];
+    return places.filter(function (p) { return p.region === want; });
+  }
+
   function regions() {
     var seen = {}, out = [];
-    places.forEach(function (p) { var d = p.district || p.region; if (d && !seen[d]) { seen[d] = 1; out.push(d); } });
+    placesInProvince().forEach(function (p) { var d = p.district || p.region; if (d && !seen[d]) { seen[d] = 1; out.push(d); } });
     out.sort(function (a, b) { return a.localeCompare(b, "ko"); });
     return ["전체"].concat(out);
   }
 
   function placeVisible(p) {
+    if (provinceFilter !== "전체" && p.region !== PROVINCE_REGION[provinceFilter]) return false;
     if (regionFilter !== "전체" && (p.district || p.region) !== regionFilter) return false;
     if (catFilter === "무료" && !isFreeCat(p.category)) return false;
     if (catFilter === "유료" && (p.fee || "").indexOf("유료") === -1) return false;
@@ -42,7 +52,21 @@
 
   // ---- 필터 칩 (버그 수정: 매번 innerHTML 초기화) ----
   function renderFilters() {
-    // 지역 칩
+    // 시/도 탭
+    provinceFiltersEl.innerHTML = "";
+    ["전체", "서울", "경기"].forEach(function (pv) {
+      var tab = document.createElement("button");
+      tab.className = "tab" + (pv === provinceFilter ? " active" : "");
+      tab.textContent = pv;
+      tab.addEventListener("click", function () {
+        if (provinceFilter === pv) return;
+        provinceFilter = pv; regionFilter = "전체"; activeIndex = -1;
+        renderFilters(); renderList(); applyMarkerVisibility(); fitVisible();
+      });
+      provinceFiltersEl.appendChild(tab);
+    });
+
+    // 지역(자치구) 칩
     regionFiltersEl.innerHTML = "";
     regions().forEach(function (r) {
       var chip = document.createElement("button");

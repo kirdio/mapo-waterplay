@@ -159,6 +159,14 @@ body {
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+.tab {
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+  padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all .15s ease;
+}
+.tab:hover { border-color: var(--ink); color: var(--ink); }
+.tab.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
 .layout { flex: 1; display: flex; min-height: 0; }
 
 .sidebar {
