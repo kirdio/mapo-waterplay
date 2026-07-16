@@ -171,9 +171,10 @@ function writeLocalReports(list) {
 const reportStore = {
   async list(status) {
     if (supabase) {
+      // contact(연락처)는 anon SELECT GRANT에서 제외됨 — 조회 컬럼에서 뺀다.
       let q = supabase
         .from('reports')
-        .select('id, place_id, type, content, contact, status, created_at')
+        .select('id, place_id, type, content, status, created_at')
         .order('created_at', { ascending: false });
       if (status) q = q.eq('status', status);
       const { data, error } = await q;
@@ -188,13 +189,11 @@ const reportStore = {
   async add({ placeId, type, content, contact }) {
     const row = { place_id: placeId || null, type, content, contact: contact || null, status: 'new' };
     if (supabase) {
-      const { data, error } = await supabase
-        .from('reports')
-        .insert(row)
-        .select('id, place_id, type, content, contact, status, created_at')
-        .single();
+      // reports는 SELECT 정책이 없어(관리자 전용 열람) INSERT 후 되읽기 불가.
+      // anon 키로도 등록만 가능하도록 select 없이 insert만 수행한다.
+      const { error } = await supabase.from('reports').insert(row);
       if (error) throw new Error(error.message);
-      return data;
+      return { id: null }; // 등록자에겐 id를 노출하지 않음(라우트에서 최소 정보만 반환)
     }
     const list = readLocalReports();
     const saved = { id: crypto.randomUUID(), created_at: new Date().toISOString(), ...row };
