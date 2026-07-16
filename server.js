@@ -33,8 +33,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 //  데이터 계층
 // ════════════════════════════════════════════════════════════════
 const SUPABASE_URL = process.env.SUPABASE_URL;
+// service_role(secret) 키 우선순위:
+//  1) SUPABASE_SERVICE_ROLE_KEY (직접 지정)
+//  2) CUSTOM_CRED_..._TOKEN (보안 자격증명 프록시가 배포 시 주입 — 평문이 .env/로그에 남지 않음)
+//  3) SUPABASE_ANON_KEY (최후 폴백)
 const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.CUSTOM_CRED_FJEMTGGDXUSWLPXVRXIK_SUPABASE_CO_TOKEN ||
+  process.env.SUPABASE_ANON_KEY;
 
 let supabase = null;
 if (SUPABASE_URL && SUPABASE_KEY && !/YOUR-PROJECT/.test(SUPABASE_URL)) {
