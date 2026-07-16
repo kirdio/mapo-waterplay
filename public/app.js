@@ -8,12 +8,28 @@
   var regionFilter = "마포구";  // 첫 화면 기본 필터: 마포구
   var catFilter = "전체";
   var PROVINCE_REGION = { "서울": "서울특별시", "경기": "경기도" };
+
+  // 서울시 공식 5권역 — 자치구 칩이 25개라 너무 많아서 한 단계 더 묶음
+  var SEOUL_ZONES = {
+    "도심권": ["종로구", "중구", "용산구"],
+    "동북권": ["성동구", "광진구", "동대문구", "중랑구", "성북구", "강북구", "도봉구", "노원구"],
+    "서북권": ["은평구", "서대문구", "마포구"],
+    "서남권": ["양천구", "강서구", "구로구", "금천구", "영등포구", "동작구", "관악구"],
+    "동남권": ["서초구", "강남구", "송파구", "강동구"]
+  };
+  var ZONE_OF_DISTRICT = {};
+  Object.keys(SEOUL_ZONES).forEach(function (z) {
+    SEOUL_ZONES[z].forEach(function (d) { ZONE_OF_DISTRICT[d] = z; });
+  });
+  var zoneFilter = ZONE_OF_DISTRICT[regionFilter] || "전체";  // 첫 화면: 마포구 → 서북권
   var isAdmin = false;
   var currentPlace = null;
   var reviewCounts = {}; // placeId -> count
 
   var listEl = document.getElementById("list");
   var provinceFiltersEl = document.getElementById("province-filters");
+  var zoneFilterGroupEl = document.getElementById("zone-filter-group");
+  var zoneFiltersEl = document.getElementById("zone-filters");
   var regionFiltersEl = document.getElementById("region-filters");
   var catFiltersEl = document.getElementById("cat-filters");
   var errEl = document.getElementById("map-error");
@@ -28,22 +44,29 @@
     });
   }
 
-  // ---- 필터 후보 (선택된 시/도 내 자치구 기준) ----
-  function placesInProvince() {
-    if (provinceFilter === "전체") return places;
-    var want = PROVINCE_REGION[provinceFilter];
-    return places.filter(function (p) { return p.region === want; });
+  // ---- 필터 후보 (선택된 시/도 · 권역 내 자치구 기준) ----
+  function placesInScope() {
+    var list = places;
+    if (provinceFilter !== "전체") {
+      var want = PROVINCE_REGION[provinceFilter];
+      list = list.filter(function (p) { return p.region === want; });
+    }
+    if (provinceFilter === "서울" && zoneFilter !== "전체") {
+      list = list.filter(function (p) { return ZONE_OF_DISTRICT[p.district] === zoneFilter; });
+    }
+    return list;
   }
 
   function regions() {
     var seen = {}, out = [];
-    placesInProvince().forEach(function (p) { var d = p.district || p.region; if (d && !seen[d]) { seen[d] = 1; out.push(d); } });
+    placesInScope().forEach(function (p) { var d = p.district || p.region; if (d && !seen[d]) { seen[d] = 1; out.push(d); } });
     out.sort(function (a, b) { return a.localeCompare(b, "ko"); });
     return ["전체"].concat(out);
   }
 
   function placeVisible(p) {
     if (provinceFilter !== "전체" && p.region !== PROVINCE_REGION[provinceFilter]) return false;
+    if (provinceFilter === "서울" && zoneFilter !== "전체" && ZONE_OF_DISTRICT[p.district] !== zoneFilter) return false;
     if (regionFilter !== "전체" && (p.district || p.region) !== regionFilter) return false;
     if (catFilter === "무료" && !isFreeCat(p.category)) return false;
     if (catFilter === "유료" && (p.fee || "").indexOf("유료") === -1) return false;
@@ -60,11 +83,31 @@
       tab.textContent = pv;
       tab.addEventListener("click", function () {
         if (provinceFilter === pv) return;
-        provinceFilter = pv; regionFilter = "전체"; activeIndex = -1;
+        provinceFilter = pv; zoneFilter = "전체"; regionFilter = "전체"; activeIndex = -1;
         renderFilters(); renderList(); applyMarkerVisibility(); fitVisible();
       });
       provinceFiltersEl.appendChild(tab);
     });
+
+    // 권역 탭 (서울일 때만 노출 — 자치구 25개를 5권역으로 묶어 스캔 부담 축소)
+    if (provinceFilter === "서울") {
+      zoneFilterGroupEl.classList.remove("hidden");
+      zoneFiltersEl.innerHTML = "";
+      ["전체"].concat(Object.keys(SEOUL_ZONES)).forEach(function (z) {
+        var tab = document.createElement("button");
+        tab.className = "tab" + (z === zoneFilter ? " active" : "");
+        tab.textContent = z;
+        tab.addEventListener("click", function () {
+          if (zoneFilter === z) return;
+          zoneFilter = z; regionFilter = "전체"; activeIndex = -1;
+          renderFilters(); renderList(); applyMarkerVisibility(); fitVisible();
+        });
+        zoneFiltersEl.appendChild(tab);
+      });
+    } else {
+      zoneFilterGroupEl.classList.add("hidden");
+      zoneFiltersEl.innerHTML = "";
+    }
 
     // 지역(자치구) 칩
     regionFiltersEl.innerHTML = "";

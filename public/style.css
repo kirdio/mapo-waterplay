@@ -167,6 +167,8 @@ body {
 .tab:hover { border-color: var(--ink); color: var(--ink); }
 .tab.active { background: var(--ink); border-color: var(--ink); color: #fff; }
 
+.filter-group.hidden { display: none; }
+
 .layout { flex: 1; display: flex; min-height: 0; }
 
 .sidebar {
